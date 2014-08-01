@@ -136,6 +136,7 @@ my @input_points = sort keys %time_arg;
 my $rate;
 my $offset;
 my ($point_a, $point_b);
+my $next_inter_point;
 if ( !@input_points ) {
     # normally not reached because of the test in line 58
     $rate = 1;
@@ -148,7 +149,8 @@ elsif ( @input_points == 1 ) {
 }
 else {
     $point_a = $time_arg{ shift @input_points };
-    $point_b = $time_arg{ shift @input_points };
+    $next_inter_point = shift @input_points;
+    $point_b = $time_arg{ $next_inter_point };
     ($rate, $offset) = linear_interpolate($point_a, $point_b);
 }
 
@@ -168,9 +170,10 @@ else {
 my $i = $start_num;
 for my $e ( @in ) {
     # check if we need to re-calculate interpolation
-    if ( @input_points and $e->{NR} >= $input_points[0] ) {
+    if ( @input_points and $e->{NR} >= $next_inter_point ) {
         $point_a = $point_b;
-        $point_b = $time_arg{ shift @input_points };
+        $next_inter_point = shift @input_points;
+        $point_b = $time_arg{ $next_inter_point };
         ($rate, $offset) = linear_interpolate($point_a, $point_b);
         printf STDERR "At subtitle %d, continu writing with rate=%.9f, offset=%.2f\n",
             $i, $rate, $offset

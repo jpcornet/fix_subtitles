@@ -56,9 +56,9 @@ else {
     $infh = \*STDIN;
 }
 
-if ( !%timestr_arg ) {
-    die "No input number specified, no re-synchronisation done.\n" .
-        "If you really just want to copy the input stream, specify 1=+0 as argument\n";
+if ( !%timestr_arg and $verbose ) {
+    warn "No input number specified, no re-synchronisation done, just copying input to output\n" .
+         "Use --help for usage instructions\n";
 }
 
 my $expect_nr = 1;
@@ -67,10 +67,19 @@ my @in;
 my %in_seen;
 my $entry;
 my %time_arg;
+my $want = 'NR';
+my $lines;
 while ( <$infh> ) {
     s/\s+$//;
     if ( /^(\d+)$/ ) {
         my $in_nr = $1;
+        if ( $want eq 'TEXT' and $lines > 0 ) {
+            warn "No blank line in subtitle file before entry $in_nr\n";
+        }
+        elsif ( $want ne 'NR' and $want ne 'TEXT-OR-NR' ) {
+            die "Unexpected new entry at line $., aborted\n";
+        }
+
         if ( $in_nr != $expect_nr and $in_nr != $alt_expect ) {
             warn "Warning in input, got subtitle nr $in_nr, expected $expect_nr\n" if $verbose;
             $alt_expect = $expect_nr + 1;
@@ -90,12 +99,19 @@ while ( <$infh> ) {
 
         $entry = { NR => $in_nr };
         push @in, $entry;
+        $want = 'TIME';
     }
     elsif ( /^(\d\d:\d\d:\d\d,\d\d\d) --> (\d\d:\d\d:\d\d,\d\d\d)$/ ) {
         my ($begin_time, $end_time) = ($1, $2);
+
+        if ( $want ne 'TIME' ) {
+            die "Unexpected time at line $., aborted\n";
+        }
+
         $entry->{'BEGIN'} = $begin_time;
         $entry->{'END'}   = $end_time;
         $entry->{TEXT}    = '';
+        $lines = 0;
 
         if ( exists $timestr_arg{ $entry->{NR} } ) {
             my $argstr = delete $timestr_arg{ $entry->{NR} };
@@ -117,14 +133,33 @@ while ( <$infh> ) {
             else {
                 $newbegin_time = parse_time($argstr);
             }
-            $time_arg{ $entry->{NR} } = { ORIG_TIME =>  $file_time, 
+            $time_arg{ $entry->{NR} } = { ORIG_TIME => $file_time, 
                                           NEW_TIME  => $newbegin_time
                                         };
         }
+        $want = 'TEXT';
+    }
+    elsif ( $want ne 'TEXT' and $want ne 'TEXT-OR-NR' ) {
+        die "Unexpected text line at line $.. Not a subtitle file?\n";
+    }
+    elsif ( /^\s*$/ ) {
+        $want = 'TEXT-OR-NR';
     }
     else {
+        if ( $want eq 'TEXT-OR-NR' ) {
+            # previous line was a blank line
+            $entry->{TEXT} .= "\n";
+        }
         $entry->{TEXT} .= "$_\n";
+        if ( ++$lines > 10 ) {
+            die "More than 10 lines of text at line $., not a subtitle file? Aborted.\n";
+        }
+        $want = 'TEXT';
     }
+}
+
+if ( $want eq 'TIME' or $want eq 'NR' ) {
+    die "Unexpected EOF\n";
 }
 
 if ( %timestr_arg ) {
@@ -138,7 +173,6 @@ my $offset;
 my ($point_a, $point_b);
 my $next_inter_point;
 if ( !@input_points ) {
-    # normally not reached because of the test in line 58
     $rate = 1;
     $offset = 0;
 }
@@ -191,7 +225,7 @@ for my $e ( @in ) {
         $new_end = 0;
     }
     print $outfh sec2str($new_begin), " --> ", sec2str($new_end), "\n";
-    print $outfh $e->{TEXT};
+    print $outfh $e->{TEXT}, "\n";
     $i++;
 }
 
@@ -255,7 +289,7 @@ sub sec2str {
     $sec -= $m * 60;
     my $s = int( $sec );
     $sec -= $s;
-    my $f = int( $sec * 1000 );
+    my $f = int( $sec * 1000 + 0.5 );
 
     return sprintf("%02d:%02d:%02d,%03d", $h, $m, $s, $f);
 }

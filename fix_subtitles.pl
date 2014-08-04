@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use Encode;
 
 my $usage = <<END_USAGE;
 Usage:
@@ -71,6 +72,13 @@ my $want = 'NR';
 my $lines;
 while ( <$infh> ) {
     s/\s+$//;
+    if ( $. == 1 ) {
+        # sometimes line 1 begins with a BOM
+        eval {
+            $_ = decode_utf8($_);
+            s/^\x{FEFF}//;
+        };
+    }
     if ( /^(\d+)$/ ) {
         my $in_nr = $1;
         if ( $want eq 'TEXT' and $lines > 0 ) {
@@ -143,6 +151,7 @@ while ( <$infh> ) {
         die "Unexpected text line at line $.. Not a subtitle file?\n";
     }
     elsif ( /^\s*$/ ) {
+        $entry->{TEXT} ||= "\n";
         $want = 'TEXT-OR-NR';
     }
     else {

@@ -187,7 +187,7 @@ if ( !@input_points ) {
 }
 elsif ( @input_points == 1 ) {
     $rate = 1;
-    my $point = $time_arg{ $input_points[0] };
+    my $point = $time_arg{ shift @input_points };
     $offset = $point->{NEW_TIME} - $point->{ORIG_TIME};
 }
 else {
